@@ -1,0 +1,67 @@
+pipeline {
+    agent { label 'master' }
+    environment {
+        //variable for image name
+        PROJECT = "nimc-sync-job"
+        APP = "nimc-sync-job"
+    }
+    tools {
+        maven 'mvn339'
+        jdk 'jdk8'
+    }
+    stages {
+        stage ('Initialize') {
+            steps {
+                deleteDir()
+                googlechatnotification (url: 'https://chat.googleapis.com/v1/spaces/AAAAim8J8lI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=V-pTtcSuqaUAeEgfM3NMwDuAkYjcQGDB3MSTC6Ks9og%3D', message: "Initializing build process for *${env.JOB_NAME}* , CURRENT_BRANCH: *${env.GIT_BRANCH}*")
+            }   
+        }
+        stage ('Clean WorkSpace') {
+            steps {
+                checkout scm
+            }  
+        }
+        stage ('Build') {
+            steps {
+                script {
+                            env.OLD_VERSION = sh(returnStdout: true, script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout')
+                            env.VERSION = env.OLD_VERSION + '-' + env.BUILD_NUMBER
+                        }
+                        sh 'mvn clean package'
+                echo 'Running build automation'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                googlechatnotification (url: 'https://chat.googleapis.com/v1/spaces/AAAAim8J8lI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=V-pTtcSuqaUAeEgfM3NMwDuAkYjcQGDB3MSTC6Ks9og%3D', message: "Build process for *${env.JOB_NAME}* , CURRENT_BRANCH: *${env.GIT_BRANCH}*")
+                  }
+               }
+        
+        stage('SonarCloud analysis') {
+                tools {
+                    jdk 'jdk11' 
+                }
+                
+            steps {
+                withSonarQubeEnv('SonarCloud') {
+                    sh 'mvn sonar:sonar ' + 
+                    '-Dproject.settings=./sonar-project.properties'
+                    }
+                 googlechatnotification (url: 'https://chat.googleapis.com/v1/spaces/AAAAim8J8lI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=V-pTtcSuqaUAeEgfM3NMwDuAkYjcQGDB3MSTC6Ks9og%3D', message: "SonarCloud Code analysis process for *${env.JOB_NAME}* , CURRENT_BRANCH: *${env.GIT_BRANCH}*")
+                }
+            }
+        
+        stage("deploy") {
+                steps {
+                    build job: 'nimc-deploy-spring-prod',
+                        parameters: [
+                            string(name: 'ENVIRONMENT', value: 'production'),
+                            string(name: 'JENKINS_JOB', value: 'nimc-sync-job'),
+                            string(name: 'INSTANCE', value: 'nimc-sync-job'),
+                            string(name: 'CURRENT_COMPONENT', value: 'nimc-sync-job'),
+                            string(name: 'PROJECT', value: 'nimc-sync-job'),
+                            string(name: 'SERVICE', value: 'nimc-sync-job')
+                        ]
+                    googlechatnotification (url: 'https://chat.googleapis.com/v1/spaces/AAAAim8J8lI/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=V-pTtcSuqaUAeEgfM3NMwDuAkYjcQGDB3MSTC6Ks9og%3D', message: "Deploy stage for *${env.JOB_NAME}* , CURRENT_BRANCH: *${env.GIT_BRANCH}*")
+                }
+            }
+        
+        }
+}
